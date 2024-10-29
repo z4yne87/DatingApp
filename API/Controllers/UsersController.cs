@@ -10,7 +10,9 @@ using Microsoft.AspNetCore.Mvc;
 namespace API.Controllers;
 
 [Authorize]
-public class UsersController(IUserRepository userRepository, IMapper mapper,
+public class UsersController(
+    IUserRepository userRepository,
+    IMapper mapper,
     IPhotoService photoService) : BaseApiController
 {
     [HttpGet]
