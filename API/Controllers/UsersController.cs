@@ -30,7 +30,9 @@ public class UsersController(
     [HttpGet("{username}")]
     public async Task<ActionResult<MemberDto>> GetUser(string username)
     {
-        var user = await unitOfWork.UserRepository.GetMemberAsync(username);
+        bool isCurrentUser = username == User.GetUsername();
+
+        var user = await unitOfWork.UserRepository.GetMemberAsync(username, isCurrentUser);
 
         if (user == null) return NotFound();
 
@@ -68,8 +70,6 @@ public class UsersController(
             PublicId = result.PublicId
         };
 
-        if (user.Photos.Count == 0) photo.IsMain = true;
-
         user.Photos.Add(photo);
 
         if (await unitOfWork.Complete()) return CreatedAtAction(nameof(GetUser),
@@ -103,13 +103,22 @@ public class UsersController(
     [HttpDelete("delete-photo/{photoId:int}")]
     public async Task<ActionResult> DeletePhoto(int photoId)
     {
-        var user = await unitOfWork.UserRepository.GetUserByUsernameAsync(User.GetUsername());
+        Photo? photo = await unitOfWork.PhotoRepository.GetPhotoById(photoId);
 
-        if (user == null) return BadRequest("User not found");
+        if (photo == null)
+        {
+            return BadRequest("Photo does not exist");
+        }
 
-        var photo = user.Photos.FirstOrDefault(x => x.Id == photoId);
+        if (photo.AppUserId != User.GetUserId())
+        {
+            return BadRequest("User does not have permission to delete this photo");
+        }
 
-        if (photo == null || photo.IsMain) return BadRequest("This photo cannot be deleted");
+        if (photo.IsMain)
+        {
+            return BadRequest("Main photo cannot be deleted");
+        }
 
         if (photo.PublicId != null)
         {
@@ -117,9 +126,12 @@ public class UsersController(
             if (result.Error != null) return BadRequest(result.Error.Message);
         }
 
-        user.Photos.Remove(photo);
+        unitOfWork.PhotoRepository.RemovePhoto(photo);
 
-        if (await unitOfWork.Complete()) return Ok();
+        if (await unitOfWork.Complete())
+        {
+            return Ok();
+        }
 
         return BadRequest("Problem deleting photo");
     }
